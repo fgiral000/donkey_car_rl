@@ -1,5 +1,6 @@
 import gym
-from gym.wrappers import NormalizeObservation, TimeLimit
+# from gym.wrappers import NormalizeObservation
+from gym.wrappers import TimeLimit
 import gym_donkeycar
 
 import stable_baselines3
@@ -10,12 +11,13 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 from stable_baselines3.common.evaluation import evaluate_policy
 from callbacks_from_rlzoo import ParallelTrainCallback, LapTimeCallback
-from wrappers_from_rlzoo import HistoryWrapper
+from wrappers_from_rlzoo import HistoryWrapper, NormalizeObservation
 
 from ae.wrapper import AutoencoderWrapper
 
 import wandb
 from wandb.integration.sb3 import WandbCallback
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 
 
 
@@ -40,9 +42,19 @@ if __name__ == "__main__":
     env = Monitor(env)
     env = TimeLimit(env, max_episode_steps= 2000)
     env = AutoencoderWrapper(env)
-    env = NormalizeObservation(env)
+    # env = NormalizeObservation(env)
     env = HistoryWrapper(env, horizon=5)
-    env.reset()
+
+    #VecNormalize wrappers
+    env = DummyVecEnv([lambda: env])
+    # env = VecNormalize(env,
+    #                    training=True,
+    #                    norm_obs=True,
+    #                    norm_reward=False,
+    #                    clip_obs=10)
+    env = VecNormalize.load(load_path="vec_normalize.pkl", venv= env)
+
+    # env.reset()
 
     #EVALUATION ENV
     # eval_env = gym.make("donkey-minimonaco-track-v0", conf = conf_car)
@@ -60,7 +72,7 @@ if __name__ == "__main__":
     lap_time_callback = LapTimeCallback()
     ## Weights and biases integration with sb3
     run = wandb.init(
-                    name='TQC-500k',
+                    name='TQC-test-mean-std',
                     project="racing_rl",
                     sync_tensorboard=True,  # auto-upload sb3's tensorboard metrics
                     monitor_gym=True,  # auto-upload the videos of agents playing the game
@@ -107,18 +119,19 @@ if __name__ == "__main__":
     ###### TRAINING #########
 
     #####Un-comment when you want to train from a pre-trained model
-    tqc_model = TQC.load("first_donkey_monaco_tqc_700k", custom_objects={"verbose":2, "tensorboard_log": f"runs/{run.id}", "learning_starts":0})
+    tqc_model = TQC.load("first_donkey_monaco_tqc_VecEnv", custom_objects={"verbose":2, "tensorboard_log": f"runs/{run.id}", "learning_starts":0})
     # tqc_model = TQC.load("first_donkey_mountain_tqc_415k.zip")
-    tqc_model.load_replay_buffer("tqc-monaco-replay-buffer-cte12-700k.pkl")
+    tqc_model.load_replay_buffer("tqc-monaco-replay-buffer-VecEnv.pkl")
     tqc_model.set_env(env=env)
 
     #Train the model
     tqc_model._last_obs = None
-    tqc_model.learn(total_timesteps=5e3, callback=[parallel_callback, lap_time_callback, wandb_callback])
+    tqc_model.learn(total_timesteps=100e3, callback=[parallel_callback, lap_time_callback, wandb_callback])
 
     #Save the model
-    # tqc_model.save("first_donkey_monaco_tqc_700k")
-    # tqc_model.save_replay_buffer("tqc-monaco-replay-buffer-cte12-700k")
+    tqc_model.save("first_donkey_monaco_tqc_VecEnv-2")
+    tqc_model.save_replay_buffer("tqc-monaco-replay-buffer-VecEnv-2")
+    env.save("vec_normalize_2.pkl")
 
 
     # policy = tqc_model.policy

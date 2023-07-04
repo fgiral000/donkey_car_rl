@@ -7,11 +7,11 @@ from stable_baselines3 import SAC
 from sb3_contrib import TQC 
 
 from stable_baselines3.common.monitor import Monitor
-from stable_baselines3.common.vec_env import DummyVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, VecNormalize
 from stable_baselines3.common.evaluation import evaluate_policy
 
 from callbacks_from_rlzoo import ParallelTrainCallback
-from wrappers_from_rlzoo import HistoryWrapper
+from wrappers_from_rlzoo import HistoryWrapper, NormalizeObservationEvaluation
 
 from ae.wrapper import AutoencoderWrapper
 
@@ -34,12 +34,25 @@ if __name__ == "__main__":
 
         # # env = DummyVecEnv([lambda: env])
         #Now we wrapp the environment with the different wrappers we want
+        # env = Monitor(env)
+        # env = TimeLimit(env, max_episode_steps= 2000)
+        # env = AutoencoderWrapper(env)
+        # env = NormalizeObservationEvaluation(env)##########################################
+        # env = HistoryWrapper(env, horizon=5)
+        # env.reset()
+
+          #Now we wrapp the environment with the different wrappers we want
         env = Monitor(env)
         env = TimeLimit(env, max_episode_steps= 2000)
         env = AutoencoderWrapper(env)
-        env = NormalizeObservation(env)##########################################
+        # env = NormalizeObservation(env)
         env = HistoryWrapper(env, horizon=5)
-        env.reset()
+
+        #VecNormalize wrappers
+        env = DummyVecEnv([lambda: env])
+        env = VecNormalize.load(load_path="vec_normalize_2.pkl", venv= env)
+
+        env.training = False
 
 
         #Now we define the callback for parallel training 
@@ -50,15 +63,15 @@ if __name__ == "__main__":
 
         #We create the agent that we want to train using sb3
         #We are going to use TQC agent
-        MODEL_PATH = "first_donkey_monaco_tqc_700k.zip"
+        MODEL_PATH = "first_donkey_monaco_tqc_VecEnv-2.zip"
         tqc_model = TQC.load(MODEL_PATH, env)
         # tqc_model.load_replay_buffer("tqc-monaco-replay-buffer-cte12-700k.pkl")
         
         
         tqc_model.set_parameters(load_path_or_dict=MODEL_PATH)
         tqc_model.set_env(env=env)
-        policy = tqc_model.policy
-        mean, std = evaluate_policy(tqc_model, env, n_eval_episodes=40, deterministic=True)
+        # policy = tqc_model.policy
+        mean, std = evaluate_policy(tqc_model, env, n_eval_episodes=5, deterministic=True)
         print(mean)
         print(std)
 
